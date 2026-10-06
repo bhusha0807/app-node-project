@@ -11,30 +11,32 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
+    # 1. Log into your Azure account securely
     - name: Azure Login
       uses: azure/login@v2
       with:
         creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
 
-    # Log into public DockerHub to push your image (you can use your Docker Hub account name here)
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }} # Save your Dockerhub credentials in GitHub Secrets if using a custom hub
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    # 2. Log into your new Azure Container Registry (ACR)
+    - name: Login to Azure Container Registry
+      run: |
+        az acr login --name bhushandevopsregistry
 
+    # 3. Build and push your application image directly into Azure
     - name: Build and Push Docker Image
       run: |
-        docker build -t yourdockerhubname/node-app:${{ github.sha }} .
-        docker push yourdockerhubname/node-app:${{ github.sha }}
+        docker build -t bhushandevopsregistry.azurecr.io/node-app:${{ github.sha }} .
+        docker push bhushandevopsregistry.azurecr.io/node-app:${{ github.sha }}
 
+    # 4. Connect to your running AKS cluster
     - name: Connect to AKS Cluster
       uses: azure/aks-set-context@v4
       with:
         resource-group: 'devops-live-rg'
         cluster-name: 'dev-aks-cluster'
 
+    # 5. Inject the new image version and deploy to Kubernetes nodes
     - name: Update Manifest & Deploy
       run: |
-        sed -i 's|__IMAGE_PLACEHOLDER__|yourdockerhubname/node-app:${{ github.sha }}|g' ./kubernetes/deployment.yaml
+        sed -i 's|__IMAGE_PLACEHOLDER__|bhushandevopsregistry.azurecr.io/node-app:${{ github.sha }}|g' ./kubernetes/deployment.yaml
         kubectl apply -f ./kubernetes/deployment.yaml
